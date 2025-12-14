@@ -1,0 +1,7 @@
+bot.py
+parsing.py
+quick_test.py
+/__pycache__
+/.venv
+/old
+.env
