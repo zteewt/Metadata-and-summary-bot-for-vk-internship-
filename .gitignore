@@ -1,7 +1,11 @@
 bot.py
 parsing.py
 quick_test.py
-/__pycache__
+*.pyc
 /.venv
 /old
 .env
+
+# Компиляция и кэш
+__pycache__/
+*.pyc
