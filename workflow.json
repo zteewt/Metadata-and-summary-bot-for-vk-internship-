@@ -1,0 +1,737 @@
+{
+  "name": "AI Agent workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "3db900f2-a7ba-4b1a-be41-4874604c73e1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "adfdc64d-bf89-4335-b4ad-5fbf927655f4",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1440,
+        2176
+      ],
+      "webhookId": "3db900f2-a7ba-4b1a-be41-4874604c73e1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Processing your file...",
+        "options": {}
+      },
+      "id": "0c61860f-0697-4046-b316-e419912ddb41",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1216,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Telegram Data - ИСПРАВЛЕННАЯ ВЕРСИЯ\nconst items = $input.all();\nconst outputItems = [];\n\nfor (const item of items) {\n  // 1. Пробуем разные способы получения метаданных\n  let metadata = {};\n  \n  // Вариант A: Из body.metadata (текущий способ)\n  if (item.json.body && item.json.body.metadata) {\n    try {\n      metadata = JSON.parse(item.json.body.metadata);\n      console.log('✅ Metadata found in body.metadata');\n    } catch (error) {\n      console.log('❌ Error parsing body.metadata:', error.message);\n    }\n  }\n  \n  // Вариант B: Из корня body\n  else if (item.json.metadata) {\n    try {\n      metadata = typeof item.json.metadata === 'string' \n        ? JSON.parse(item.json.metadata)\n        : item.json.metadata;\n      console.log('✅ Metadata found in json.metadata');\n    } catch (error) {\n      console.log('❌ Error parsing json.metadata:', error.message);\n    }\n  }\n  \n  // Вариант C: Может быть, метаданные уже распарсены\n  else if (item.json.user || item.json.chat) {\n    metadata = item.json;\n    console.log('✅ Metadata already parsed in json');\n  }\n  \n  // 2. Извлекаем информацию о файле\n  const fileName = (metadata.file && metadata.file.name) || 'unknown';\n  let fileExtension = (metadata.file && metadata.file.type) || '';\n  \n  // Убираем точку в начале расширения\n  if (fileExtension.startsWith('.')) {\n    fileExtension = fileExtension.substring(1);\n  }\n  \n  const mimeType = metadata.mimeType || '';\n  const fileSize = metadata.file && metadata.file.size ? \n    `${Math.round(metadata.file.size / 1024 / 1024 * 100) / 100} MB` : 'unknown';\n  \n  // 3. Копируем ВСЕ бинарные данные\n  let binaryData = {};\n  if (item.binary) {\n    binaryData = { ...item.binary };\n    \n    // Если есть ключ '0', создаем также 'file'\n    if (item.binary['0']) {\n      binaryData.file = item.binary['0'];\n    }\n  }\n  \n  // 4. Создаем выходной элемент с ВСЕМИ данными\n  outputItems.push({\n    json: {\n      // Основные метаданные файла\n      fileName: fileName,\n      fileExtension: fileExtension,\n      mimeType: mimeType,\n      fileSize: fileSize,\n      \n      // Копируем ВСЕ метаданные из Telegram\n      ...metadata,\n      \n      // Гарантируем наличие user и chat (даже если пустые)\n      user: metadata.user || { \n        id: 'unknown_id', \n        username: 'unknown_user', \n        full_name: 'Неизвестный пользователь' \n      },\n      chat: metadata.chat || { \n        id: 'unknown_chat_id', \n        type: 'unknown' \n      },\n      message: metadata.message || { \n        message_id: 'unknown_message_id' \n      },\n      file: metadata.file || { \n        name: fileName, \n        type: `.${fileExtension}`, \n        size: metadata.file?.size || 0 \n      }\n    },\n    binary: binaryData\n  });\n}\n\nconsole.log('=== PARSED METADATA SUMMARY ===');\nif (outputItems[0] && outputItems[0].json) {\n  const data = outputItems[0].json;\n  console.log('File:', data.fileName);\n  console.log('User exists:', !!data.user);\n  console.log('Chat exists:', !!data.chat);\n  console.log('User full name:', data.user?.full_name);\n  console.log('Chat ID:', data.chat?.id);\n  console.log('All keys:', Object.keys(data).join(', '));\n}\n\nreturn outputItems;"
+      },
+      "id": "d3ce47f7-9b62-4667-823b-c3a0068891d5",
+      "name": "Parse Telegram Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileExtension }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f71e08c7-8b49-47d0-b24d-48fa39cac70f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileExtension }}",
+                    "rightValue": "docx",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f2f7ba95-60f7-4f58-a335-aae3d5a936ce"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DOCX"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileExtension }}",
+                    "rightValue": "txt",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "fd8d75d5-e7a5-464b-b737-046d2193d34d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "TXT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fileExtension }}",
+                    "rightValue": "md",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e2d15787-66cf-43a8-843b-ff2f2153f1dd"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "MD"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Other"
+        }
+      },
+      "id": "f1a8f0e3-17d1-4691-9420-c28bbf5a9fea",
+      "name": "Route by File Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -928,
+        2224
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "id": "706ba18a-6018-474b-8204-e4a99172ece5",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -704,
+        1984
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "rtf",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "id": "27c73c38-9a24-4e20-9e5d-ea8e3cef5c4a",
+      "name": "Extract DOCX Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -704,
+        2176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "file",
+        "destinationKey": "text",
+        "options": {}
+      },
+      "id": "0fffd709-f056-44d3-b998-30c4eea74052",
+      "name": "Extract TXT Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -704,
+        2368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "file",
+        "destinationKey": "text",
+        "options": {}
+      },
+      "id": "f42bd7a1-25c9-4f36-b3e0-de661f11ebc7",
+      "name": "Extract MD Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -704,
+        2560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1hdc5bnopjZHX9v0KYP-aGjZwO3BAkHwmdYFUiL47MBM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1hdc5bnopjZHX9v0KYP-aGjZwO3BAkHwmdYFUiL47MBM/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_name": "=={{ $json.sheetData.file_name }}",
+            "summary": "=={{ $json.sheetData.summary }}",
+            "keywords": "=={{ $json.sheetData.keywords }}",
+            "timestamp": "=={{ $json.sheetData.timestamp }}",
+            "uploader": "=={{ $json.sheetData.uploader }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "uploader",
+              "displayName": "uploader",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keywords",
+              "displayName": "keywords",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c652974d-7b14-49fa-8935-68cc73dfcda8",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        688,
+        2336
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "o8tYGhiHqLzXssrF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ba3ada73-2d46-4c54-8851-9a31f406a80c",
+              "name": "chatInput",
+              "value": "=={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -544,
+        2336
+      ],
+      "id": "f65f05c5-3e59-4243-8775-b8778d91da4e",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst text = $json.text || $json.chatInput || '';\n\n// Проверяем наличие текста\nif (!text || text.trim().length < 50) {\n  return [{\n    json: {\n      ...$json,\n      extractedText: text,\n      preparedText: text,\n      textForSummary: text,\n      textForKeywords: text,\n      textStatus: text.length < 50 ? \"text_too_short\" : \"ok\",\n      originalLength: text.length\n    }\n  }];\n}\n\n// Очистка и подготовка текста\nconst cleanText = text\n  .replace(/\\s+/g, ' ')\n  .replace(/[^\\w\\sа-яёА-ЯЁ.,!?;:()-]/gu, ' ')\n  .trim();\n\n// Разделяем для разных задач (Hugging Face лимиты)\nconst textForSummary = cleanText.length > 2000 \n  ? cleanText.substring(0, 2000) \n  : cleanText;\n\nconst textForKeywords = cleanText.length > 1000 \n  ? cleanText.substring(0, 1000) \n  : cleanText;\n\nreturn [{\n  json: {\n    ...$json,\n    extractedText: cleanText,\n    preparedText: cleanText,\n    textForSummary: textForSummary,\n    textForKeywords: textForKeywords,\n    textStatus: \"prepared\",\n    originalLength: cleanText.length,\n    summaryLength: textForSummary.length,\n    keywordsLength: textForKeywords.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        2336
+      ],
+      "id": "fdc73e77-81fc-45a2-880e-c1ae4484305f",
+      "name": "Prepare Text for HF"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/models/sshleifer/distilbart-cnn-12-6",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inputs\": \"={{$json.textForSummary}}\",\n  \"parameters\": {\n    \"max_length\": 150,\n    \"min_length\": 50,\n    \"do_sample\": false\n  }\n}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        2336
+      ],
+      "id": "532eed58-8a47-455a-96db-8dd7d17cd05b",
+      "name": "HF Summarization",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3SlExMfQvGtpiDHT",
+          "name": "Header Auth account"
+        },
+        "httpBasicAuth": {
+          "id": "pLjHQhbMKtOu3bJc",
+          "name": "Unnamed credential"
+        },
+        "httpBearerAuth": {
+          "id": "l7LbZvjQTUDcEMJl",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst response = $input.first().json;\nconst metadata = $json; // Данные из предыдущей ноды\n\nlet summary = '';\nlet hfStatus = '';\n\n// 1. Проверяем ошибки\nif (response.error) {\n  if (response.error.includes('loading')) {\n    summary = `Модель загружается, попробуйте позже (${Math.ceil(response.estimated_time)}с)`;\n    hfStatus = 'loading';\n  } else {\n    summary = `Ошибка API: ${response.error.substring(0, 100)}`;\n    hfStatus = 'error';\n  }\n} \n// 2. Успешный ответ\nelse if (Array.isArray(response) && response[0]) {\n  summary = response[0].summary_text || '';\n  hfStatus = 'success';\n} \n// 3. Альтернативный формат\nelse if (response.summary_text) {\n  summary = response.summary_text;\n  hfStatus = 'success';\n} \n// 4. Fallback - простой метод\nelse {\n  const sentences = metadata.textForSummary.split(/[.!?]+/).filter(s => s.trim().length > 10);\n  if (sentences.length > 1) {\n    // Берем первое и последнее предложение\n    summary = sentences[0] + '. ' + sentences[sentences.length - 1] + '.';\n    hfStatus = 'fallback';\n  } else {\n    summary = metadata.textForSummary.substring(0, 150) + '...';\n    hfStatus = 'short';\n  }\n}\n\n// Очистка итогового текста\nconst cleanSummary = summary\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .substring(0, 500);\n\nreturn [{\n  json: {\n    ...metadata,\n    summary: cleanSummary,\n    hfSummaryStatus: hfStatus,\n    hfSummaryResponse: response\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2336
+      ],
+      "id": "5ba209b2-f6ca-4051-adeb-84a34d366ae6",
+      "name": "Process Summary Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/ml6team/keyphrase-extraction-kbir-inspec",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "        application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inputs\": \"={{$json.textForKeywords}}\"\n}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        176,
+        2336
+      ],
+      "id": "1146580f-0926-43c3-94d7-42586e0574dd",
+      "name": "HF Keywords",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3SlExMfQvGtpiDHT",
+          "name": "Header Auth account"
+        },
+        "httpBearerAuth": {
+          "id": "l7LbZvjQTUDcEMJl",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst response = $input.first().json;\nconst metadata = $json || {};\n\nlet keywords = [];\nlet keywordsStatus = '';\nlet keywordsSource = '';\n\n// 1. БЕЗОПАСНАЯ проверка ответа от API\nif (response && !response.error && Array.isArray(response) && response.length > 0) {\n  \n  // Формат модели ml6team/keyphrase-extraction-kbir-inspec\n  if (response[0].word) {\n    keywords = response\n      .sort((a, b) => (b.score || 0) - (a.score || 0))\n      .slice(0, 10)\n      .map(item => item.word)\n      .filter(word => word && word.trim().length > 0);\n    \n    if (keywords.length > 0) {\n      keywordsStatus = 'success';\n      keywordsSource = 'hf_api';\n    }\n  }\n}\n\n// 2. Fallback алгоритм (С ЗАЩИТОЙ ОТ undefined)\nif (keywords.length === 0) {\n  // Безопасное получение текста из разных источников\n  const text = (metadata.textForKeywords || metadata.extractedText || metadata.text || '').toString();\n  \n  if (text && text.trim().length > 10) {\n    // .toLowerCase() теперь безопасен, так как text точно строка\n    const cleanText = text.toLowerCase();\n    const stopwords = ['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это', 'как', 'но', 'а', 'или', 'у', 'за', 'к', 'от', 'о', 'же', 'бы', 'из'];\n    \n    const words = cleanText\n      .replace(/[^\\w\\sа-яёa-z]/gi, ' ')\n      .split(/\\s+/)\n      .filter(word => word && word.length > 3 && !stopwords.includes(word));\n    \n    const freq = {};\n    words.forEach(word => {\n      if (word) {\n        freq[word] = (freq[word] || 0) + 1;\n      }\n    });\n    \n    keywords = Object.entries(freq)\n      .sort((a, b) => b[1] - a[1])\n      .slice(0, 8)\n      .map(([word]) => word);\n    \n    keywordsStatus = 'fallback';\n    keywordsSource = 'algorithm';\n  } else {\n    keywords = ['документ', 'текст', 'анализ'];\n    keywordsStatus = 'too_short';\n    keywordsSource = 'default';\n  }\n}\n\n// 3. ГАРАНТИРОВАННЫЙ результат\nconst keywordsString = keywords.length > 0 ? keywords.join(', ') : 'ключевые слова не найдены';\n\n// 4. Подготовка данных для Google Sheets\nconst userName = metadata.user?.full_name || \n                 metadata.user?.username || \n                 metadata.uploader || \n                 'Unknown';\n\nconst sheetData = {\n  timestamp: new Date().toISOString(),\n  uploader: userName,\n  file_name: metadata.fileName || metadata.file_name || 'unknown',\n  summary: metadata.summary || 'No summary generated',\n  keywords: keywordsString,\n  keywords_source: keywordsSource,\n  processing_status: keywordsStatus\n};\n\n// 5. ВОЗВРАТ данных (обязательно!)\nreturn [{\n  json: {\n    // Копируем все входные данные\n    ...metadata,\n    // Добавляем результаты\n    keywords: keywordsString,\n    keywordsArray: keywords,\n    keywordsCount: keywords.length,\n    hfKeywordsStatus: keywordsStatus,\n    hfKeywordsSource: keywordsSource,\n    hfKeywordsResponse: response || 'empty_response',\n    // Данные для таблицы\n    sheetData: sheetData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        2336
+      ],
+      "id": "72e2f6cd-31b5-4201-b69b-2e5cbc3bc87e",
+      "name": "Process Keywords Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Debug: Check Data Before Google Sheets\nconsole.log('=== DEBUG: Before Google Sheets ===');\nconsole.log('Full JSON:', JSON.stringify($json, null, 2));\nconsole.log('SheetData exists?', !!$json.sheetData);\nif ($json.sheetData) {\n  console.log('SheetData keys:', Object.keys($json.sheetData));\n  console.log('File name for sheet:', $json.sheetData.file_name);\n  console.log('Summary for sheet:', $json.sheetData.summary);\n}\n\n// ГАРАНТИРУЕМ наличие sheetData\nconst sheetData = $json.sheetData || {\n  timestamp: new Date().toISOString(),\n  uploader: $json.userName || $json.user?.full_name || 'Unknown',\n  file_name: $json.fileName || 'unknown',\n  summary: $json.summary || 'No summary',\n  keywords: $json.keywords || 'No keywords'\n};\n\nreturn [{\n  json: {\n    ...$json,\n    sheetData: sheetData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        2336
+      ],
+      "id": "60828ac7-0dd8-4818-ba53-c9954da0dd92",
+      "name": "Debug - Check Metadata"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "zteewt.app.n8n.cloud",
+            "user-agent": "python-requests/2.32.5",
+            "content-length": "1297230",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "178.76.243.156",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "RU",
+            "cf-ray": "9ae3f335e425f3ab-DME",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "multipart/form-data; boundary=05c6f9036cb16cebd061a892e9e67f4b",
+            "x-forwarded-for": "178.76.243.156, 172.71.184.205",
+            "x-forwarded-host": "zteewt.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-23-54c976d6d9-9vvhw",
+            "x-is-trusted": "yes",
+            "x-real-ip": "178.76.243.156"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "metadata": "{\"event\": \"file_upload\", \"user\": {\"id\": 1069738452, \"username\": \"zteewt\", \"first_name\": \"🥸\", \"last_name\": \"\", \"full_name\": \"🥸\"}, \"chat\": {\"id\": 1069738452, \"type\": \"private\", \"title\": null}, \"message\": {\"message_id\": 125, \"date\": \"2025-12-15T06:40:29+00:00\"}, \"file\": {\"name\": \"LaboratornaaRabota09SetiNastrojka_protokola_OSPFPoiskNepoladokVSeti.pdf\", \"size\": 1296479, \"type\": \".pdf\"}, \"temp_message_id\": 126}"
+          },
+          "webhookUrl": "https://zteewt.app.n8n.cloud/webhook-test/3db900f2-a7ba-4b1a-be41-4874604c73e1",
+          "executionMode": "test"
+        },
+        "binary": {
+          "file": {
+            "mimeType": "application/octet-stream",
+            "fileExtension": "bin",
+            "data": "filesystem-v2",
+            "fileName": "LaboratornaaRabota09SetiNastrojka_protokola_OSPFPoiskNepoladokVSeti.pdf",
+            "id": "filesystem-v2:workflows/WfN70caDzbfTa4mY/executions/temp/binary_data/f8d0ed6c-1dbc-4224-9210-b5be84ceb954",
+            "fileSize": "1.3 MB"
+          }
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond Immediately",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Telegram Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Telegram Data": {
+      "main": [
+        [
+          {
+            "node": "Route by File Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by File Type": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract DOCX Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract TXT Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract MD Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        []
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract DOCX Text": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract TXT Text": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract MD Text": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Prepare Text for HF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Text for HF": {
+      "main": [
+        [
+          {
+            "node": "HF Summarization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Summarization": {
+      "main": [
+        [
+          {
+            "node": "Process Summary Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Summary Response": {
+      "main": [
+        [
+          {
+            "node": "HF Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Keywords": {
+      "main": [
+        [
+          {
+            "node": "Process Keywords Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Keywords Response": {
+      "main": [
+        [
+          {
+            "node": "Debug - Check Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug - Check Metadata": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "e9508e39-7df3-4dac-8786-f38039638db4",
+  "meta": {
+    "templateId": "ready-to-run-ai-workflow",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d817fdae1791a0a34ced78009c9a120f7e76ae7d327e185e2c4d19077bd10ff9"
+  },
+  "id": "WfN70caDzbfTa4mY",
+  "tags": []
+}
